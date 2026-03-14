@@ -4,8 +4,8 @@ uvicorn[standard]==0.34.0
 pydantic[email]==2.10.4
 
 # OpenAI Agents SDK
-openai-agents==0.0.7
-openai==1.59.5
+openai-agents>=0.0.7
+openai>=1.66.5
 
 # Database
 asyncpg==0.30.0

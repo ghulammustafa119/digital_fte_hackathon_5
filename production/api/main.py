@@ -1,5 +1,8 @@
 """FastAPI application for Customer Success FTE - Multi-channel support API."""
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
@@ -49,7 +52,10 @@ kafka_producer = FTEKafkaProducer()
 @app.on_event("startup")
 async def startup():
     await get_db_pool()
-    await kafka_producer.start()
+    try:
+        await kafka_producer.start()
+    except Exception as e:
+        logger.warning(f"Kafka producer not available: {e}")
     await gmail_handler.initialize()
     await whatsapp_handler.initialize()
     logger.info("FTE API started successfully")

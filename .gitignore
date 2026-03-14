@@ -29,4 +29,34 @@ docker-compose.override.yml
 # Secrets
 *.pem
 *.key
+*.p12
 credentials.json
+credentials.json.json
+token.json
+token.pickle
+client_secret*.json
+service_account*.json
+*.secret
+
+# Env files
+.env.local
+.env.production
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Coverage
+htmlcov/
+.coverage
+coverage.xml
+
+# pytest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+
+# Documents (not part of project)
+documents.txt
