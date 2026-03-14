@@ -1,0 +1,143 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # PostgreSQL with pgvector
+  # ============================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: fte-postgres
+    environment:
+      POSTGRES_DB: fte_db
+      POSTGRES_USER: fte_user
+      POSTGRES_PASSWORD: fte_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./production/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fte_user -d fte_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Zookeeper (Kafka dependency)
+  # ============================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: fte-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  # ============================================
+  # Apache Kafka
+  # ============================================
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: fte-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ============================================
+  # Kafka Topic Initializer
+  # ============================================
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: fte-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      echo 'Creating Kafka topics...'
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 --topic fte.tickets.incoming
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 --topic fte.channels.email.inbound
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 --topic fte.channels.whatsapp.inbound
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 --topic fte.channels.webform.inbound
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 --topic fte.channels.email.outbound
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 --topic fte.channels.whatsapp.outbound
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 --topic fte.escalations
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 --topic fte.metrics
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1 --topic fte.dlq
+      echo 'Topics created successfully!'
+      kafka-topics --list --bootstrap-server kafka:9092
+      "
+
+  # ============================================
+  # FastAPI Application
+  # ============================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fte-api
+    command: uvicorn production.api.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://fte_user:fte_password@postgres:5432/fte_db
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GMAIL_CREDENTIALS=${GMAIL_CREDENTIALS}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_WHATSAPP_NUMBER=${TWILIO_WHATSAPP_NUMBER}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+  # ============================================
+  # Message Processor Worker
+  # ============================================
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fte-worker
+    command: python -m production.workers.message_processor
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://fte_user:fte_password@postgres:5432/fte_db
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GMAIL_CREDENTIALS=${GMAIL_CREDENTIALS}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_WHATSAPP_NUMBER=${TWILIO_WHATSAPP_NUMBER}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:

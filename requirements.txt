@@ -1,0 +1,35 @@
+# FastAPI
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic[email]==2.10.4
+
+# OpenAI Agents SDK
+openai-agents==0.0.7
+openai==1.59.5
+
+# Database
+asyncpg==0.30.0
+pgvector==0.3.6
+
+# Kafka
+aiokafka==0.12.0
+
+# Gmail
+google-api-python-client==2.155.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.1
+
+# Twilio (WhatsApp)
+twilio==9.3.7
+
+# HTTP client
+httpx==0.28.1
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.0
+locust==2.32.4
+
+# Utilities
+python-dotenv==1.0.1
+python-multipart==0.0.20
