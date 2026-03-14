@@ -50,7 +50,8 @@ A 24/7 AI-powered Customer Success agent (Digital FTE) for **FlowBoard**, a clou
 
 | Component | Technology |
 |-----------|-----------|
-| Agent | OpenAI Agents SDK (GPT-4o) |
+| Agent (Production) | OpenAI Agents SDK (GPT-4o) |
+| Agent (Incubation) | MCP Server (7 tools) |
 | API | FastAPI (Python) |
 | Database | PostgreSQL 16 + pgvector |
 | Streaming | Apache Kafka |
@@ -72,17 +73,21 @@ A 24/7 AI-powered Customer Success agent (Digital FTE) for **FlowBoard**, a clou
 ├── specs/                      # Incubation deliverables
 │   ├── discovery-log.md        # Requirements discovered
 │   ├── customer-success-fte-spec.md
-│   └── transition-checklist.md
-├── src/web-form/               # Next.js Web Support Form
-│   ├── components/SupportForm.tsx
-│   └── app/
+│   ├── transition-checklist.md
+│   ├── agent-skills-manifest.yaml  # 6 reusable agent skills
+│   └── runbook.md              # Incident response runbook
+├── src/
+│   ├── agent/mcp_server.py     # MCP Server (7 tools, incubation prototype)
+│   └── web-form/               # Next.js Web Support Form
+│       ├── components/SupportForm.tsx
+│       └── app/
 ├── production/
 │   ├── agent/                  # OpenAI Agents SDK agent
 │   ├── channels/               # Gmail, WhatsApp, Web handlers
 │   ├── api/main.py             # FastAPI application
 │   ├── workers/                # Kafka message processor
 │   ├── kafka_client.py         # Kafka producer/consumer
-│   ├── database/               # Schema + queries
+│   ├── database/               # Schema + queries + KB seed script
 │   ├── k8s/                    # Kubernetes manifests
 │   └── tests/                  # Unit, E2E, load tests
 ├── docker-compose.yml          # Local dev (Postgres + Kafka + App)
@@ -113,20 +118,26 @@ cp .env.example .env
 docker-compose up -d postgres kafka zookeeper kafka-init
 ```
 
-### 3. Install Dependencies & Run API
+### 3. Install Dependencies & Seed Knowledge Base
 
 ```bash
 pip install -r requirements.txt
+python -m production.database.seed_knowledge_base
+```
+
+### 4. Run API
+
+```bash
 uvicorn production.api.main:app --reload --port 8000
 ```
 
-### 4. Start Message Processor
+### 5. Start Message Processor
 
 ```bash
 python -m production.workers.message_processor
 ```
 
-### 5. Start Web Form (Optional)
+### 6. Start Web Form (Optional)
 
 ```bash
 cd src/web-form
@@ -134,7 +145,7 @@ npm install
 npm run dev
 ```
 
-### 6. Run Everything with Docker
+### 7. Run Everything with Docker
 
 ```bash
 docker-compose up --build
@@ -207,3 +218,43 @@ See full schema: [`production/database/schema.sql`](production/database/schema.s
 - Escalation rate: < 20%
 - Cross-channel identification: > 95%
 - Uptime: > 99.9%
+
+## MCP Server (Incubation Phase)
+
+The MCP server (`src/agent/mcp_server.py`) exposes 7 tools via the Model Context Protocol:
+
+| Tool | Purpose |
+|------|---------|
+| `search_knowledge_base` | Search product docs (text matching) |
+| `create_ticket` | Create support ticket with channel tracking |
+| `get_customer_history` | Get cross-channel interaction history |
+| `escalate_to_human` | Escalate to human support with reason |
+| `send_response` | Send channel-formatted response |
+| `get_ticket_status` | Check ticket status |
+| `update_customer_sentiment` | Track customer sentiment score |
+
+```bash
+# Run MCP server
+python src/agent/mcp_server.py
+```
+
+## Agent Skills
+
+6 reusable skills defined in `specs/agent-skills-manifest.yaml`:
+
+1. **Knowledge Retrieval** - Search product documentation
+2. **Sentiment Analysis** - Track customer sentiment (escalate if < 0.3)
+3. **Escalation Decision** - Auto-detect 8 escalation triggers
+4. **Channel Adaptation** - Format responses per channel rules
+5. **Customer Identification** - Cross-channel identity matching
+6. **Ticket Management** - Full ticket lifecycle tracking
+
+## Operational Runbook
+
+See [`specs/runbook.md`](specs/runbook.md) for incident response procedures covering:
+- API/Worker pod failures
+- Database connection issues
+- Gmail/WhatsApp channel outages
+- High escalation rate troubleshooting
+- Kafka broker recovery
+- Scaling and full system restart procedures
