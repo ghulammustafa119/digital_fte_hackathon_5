@@ -1,5 +1,8 @@
 """Unified message processor - Kafka consumer that routes messages to the FTE agent."""
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import asyncio
 from datetime import datetime
 import logging
